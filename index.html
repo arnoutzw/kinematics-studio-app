@@ -99,6 +99,23 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
 .toggle input:checked+.slider{background:var(--accent)}
 .toggle input:checked+.slider::after{left:19px;background:white}
 
+/* Path planner */
+.wp-list{max-height:340px;overflow-y:auto}
+.wp-row{display:flex;gap:4px;margin-bottom:6px;align-items:center}
+.wp-num{width:22px;height:22px;border-radius:50%;background:var(--input);color:var(--text-muted);font-size:10px;font-family:'JetBrains Mono',monospace;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s}
+.wp-row.active .wp-num{background:var(--accent);color:var(--bg)}
+.wp-row.reached .wp-num{background:rgba(34,197,94,.3);color:#22c55e}
+.wp-row input[type=number]{width:100%;padding:4px 6px;background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:11px;font-family:'JetBrains Mono',monospace;outline:none}
+.wp-row input[type=number]:focus{border-color:var(--accent)}
+.wp-header{display:flex;gap:4px;margin-bottom:6px;align-items:center;padding-left:26px}
+.wp-header span{flex:1;font-size:10px;color:var(--text-muted);text-align:center;font-family:'JetBrains Mono',monospace}
+.path-controls{display:flex;gap:6px;margin-top:10px}
+.path-controls .btn{flex:1}
+.path-progress{font-size:11px;color:var(--muted);text-align:center;margin-top:8px;font-family:'JetBrains Mono',monospace}
+.speed-row{display:flex;align-items:center;gap:8px;margin-top:10px}
+.speed-row label{font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;flex-shrink:0}
+.speed-row select{flex:1;padding:4px 6px;font-size:11px}
+
 @media(max-width:768px){
   #app{flex-direction:column}
   #sidebar{width:100%;height:45%;border-left:none;border-top:1px solid var(--border)}
@@ -128,8 +145,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
     <div class="section">
       <h2>Mode</h2>
       <div class="mode-toggle">
-        <button class="mode-btn active" data-mode="fk">Forward (FK)</button>
-        <button class="mode-btn" data-mode="ik">Inverse (IK)</button>
+        <button class="mode-btn active" data-mode="fk">FK</button>
+        <button class="mode-btn" data-mode="ik">IK</button>
+        <button class="mode-btn" data-mode="path">Path</button>
       </div>
     </div>
 
@@ -156,7 +174,26 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
       <div class="ik-row"><label>Z</label><input type="number" id="ik-z" step="0.05" value="0.3"></div>
       <button class="btn btn-primary" id="solve-ik" style="margin-top:8px">Solve IK</button>
       <div class="ik-status" id="ik-status" style="display:none"></div>
-      <p style="font-size:11px;color:var(--muted);margin-top:8px">You can also drag the yellow target sphere in the 3D view.</p>
+      <p style="font-size:11px;color:var(--muted);margin-top:8px">You can also drag the amber target sphere in the 3D view.</p>
+    </div>
+
+    <div class="section" id="path-section" style="display:none">
+      <h2>Path Planner</h2>
+      <div class="wp-header"><span>X</span><span>Y</span><span>Z</span></div>
+      <div class="wp-list" id="wp-list"></div>
+      <div class="speed-row">
+        <label>Speed</label>
+        <select id="path-speed">
+          <option value="2000">Slow</option>
+          <option value="800" selected>Normal</option>
+          <option value="350">Fast</option>
+        </select>
+      </div>
+      <div class="path-controls">
+        <button class="btn btn-primary" id="path-play">Play</button>
+        <button class="btn btn-outline" id="path-stop">Stop</button>
+      </div>
+      <div class="path-progress" id="path-progress"></div>
     </div>
 
     <div class="section">
@@ -419,6 +456,7 @@ class Visualizer {
     this._createGrid();
     this._createWorldAxes();
     this._createTarget();
+    this._createWaypointGroup();
     this._initOrbitControls();
     this._initDrag();
 
@@ -591,6 +629,62 @@ class Visualizer {
     this.traceLine.geometry.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
   }
 
+  // ---- Waypoint Visualization ----
+  _createWaypointGroup() {
+    this.waypointGroup = new THREE.Group();
+    this.scene.add(this.waypointGroup);
+    this.waypointMeshes = [];
+    this.waypointPathLine = null;
+  }
+
+  setWaypoints(points) {
+    while (this.waypointGroup.children.length) this.waypointGroup.remove(this.waypointGroup.children[0]);
+    this.waypointMeshes = [];
+    if (this.waypointPathLine) { this.scene.remove(this.waypointPathLine); this.waypointPathLine = null; }
+    if (!points || points.length === 0) return;
+
+    const wpGeo = new THREE.SphereGeometry(0.035, 16, 16);
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      const mat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 0.3, transparent: true, opacity: 0.7 });
+      const mesh = new THREE.Mesh(wpGeo, mat);
+      mesh.position.set(p[0], p[1], p[2]);
+      this.waypointGroup.add(mesh);
+      this.waypointMeshes.push(mesh);
+    }
+
+    const linePoints = points.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
+    this.waypointPathLine = new THREE.Line(lineGeo, new THREE.LineDashedMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.35, dashSize: 0.05, gapSize: 0.03 }));
+    this.waypointPathLine.computeLineDistances();
+    this.scene.add(this.waypointPathLine);
+  }
+
+  highlightWaypoint(index) {
+    for (let i = 0; i < this.waypointMeshes.length; i++) {
+      const m = this.waypointMeshes[i];
+      if (i === index) {
+        m.material.opacity = 1.0;
+        m.material.emissiveIntensity = 0.6;
+        m.scale.setScalar(1.6);
+      } else if (i < index) {
+        m.material.opacity = 0.3;
+        m.material.emissiveIntensity = 0.1;
+        m.scale.setScalar(1);
+      } else {
+        m.material.opacity = 0.7;
+        m.material.emissiveIntensity = 0.3;
+        m.scale.setScalar(1);
+      }
+    }
+  }
+
+  clearWaypoints() {
+    while (this.waypointGroup.children.length) this.waypointGroup.remove(this.waypointGroup.children[0]);
+    this.waypointMeshes = [];
+    if (this.waypointPathLine) { this.scene.remove(this.waypointPathLine); this.waypointPathLine = null; }
+  }
+
   // ---- Orbit Camera Controls ----
   _initOrbitControls() {
     this._orbitState = { rotating: false, panning: false, sx: 0, sy: 0 };
@@ -722,6 +816,12 @@ class App {
     this._animStart = null;
     this._animDuration = 0;
     this._animStartTime = 0;
+
+    // Path planner state
+    this._pathWaypoints = [];
+    this._pathPlaying = false;
+    this._pathCurrentIdx = 0;
+    this._pathInited = false;
   }
 
   init() {
@@ -795,10 +895,16 @@ class App {
   }
 
   _setMode(mode) {
+    // Stop path playback if leaving path mode
+    if (this.mode === 'path' && mode !== 'path') {
+      this._stopPath();
+      this.vis.clearWaypoints();
+    }
     this.mode = mode;
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
     document.getElementById('fk-section').style.display = mode === 'fk' ? '' : 'none';
     document.getElementById('ik-section').style.display = mode === 'ik' ? '' : 'none';
+    document.getElementById('path-section').style.display = mode === 'path' ? '' : 'none';
 
     if (mode === 'ik') {
       const T = this.robot.fk(this.robot.angles);
@@ -807,6 +913,10 @@ class App {
       document.getElementById('ik-y').value = ee[1].toFixed(3);
       document.getElementById('ik-z').value = ee[2].toFixed(3);
       this.vis.setTarget(ee, true);
+    } else if (mode === 'path') {
+      this._initPathWaypoints();
+      this._updateWaypointVis();
+      this.vis.setTarget([0,0,0], false);
     } else {
       this.vis.setTarget([0,0,0], false);
       document.getElementById('ik-status').style.display = 'none';
@@ -844,7 +954,8 @@ class App {
   _tickAnimation(now) {
     if (!this._animating) return;
     let t = (now - this._animStartTime) / this._animDuration;
-    if (t >= 1) { t = 1; this._animating = false; }
+    let done = false;
+    if (t >= 1) { t = 1; this._animating = false; done = true; }
     // Smooth ease
     t = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
     for (let i = 0; i < this.robot.nJoints; i++) {
@@ -852,6 +963,12 @@ class App {
     }
     this._syncSliders();
     this._updateFK();
+
+    // Path playback: advance to next waypoint when segment finishes
+    if (done && this._pathPlaying) {
+      this._pathCurrentIdx++;
+      setTimeout(() => this._advancePath(), 120);
+    }
   }
 
   _syncSliders() {
@@ -863,6 +980,153 @@ class App {
         s.value = deg;
         v.textContent = deg + '\u00B0';
       }
+    }
+  }
+
+  // ---- Path Planner ----
+  _initPathWaypoints() {
+    if (this._pathInited) {
+      this._updateWaypointVis();
+      return;
+    }
+    this._pathInited = true;
+
+    // Generate a default circular path within robot workspace
+    const T = this.robot.fk(this.robot.angles);
+    const ee = mat4Pos(T[this.robot.nJoints]);
+    const cx = 0, cz = 0;
+    const cy = ee[1] * 0.5;
+    const r = Math.max(0.15, v3Len(ee) * 0.2);
+
+    this._pathWaypoints = [];
+    for (let i = 0; i < 10; i++) {
+      const angle = (i / 10) * Math.PI * 2;
+      this._pathWaypoints.push([
+        cx + r * Math.cos(angle),
+        cy + 0.3,
+        cz + r * Math.sin(angle)
+      ]);
+    }
+    this._buildWaypointUI();
+  }
+
+  _resetPathForPreset() {
+    this._pathInited = false;
+    this._pathPlaying = false;
+    this._pathCurrentIdx = 0;
+    this.vis.clearWaypoints();
+    if (this.mode === 'path') {
+      this._initPathWaypoints();
+      this._updateWaypointVis();
+    }
+  }
+
+  _buildWaypointUI() {
+    const container = document.getElementById('wp-list');
+    container.innerHTML = '';
+    for (let i = 0; i < 10; i++) {
+      const wp = this._pathWaypoints[i];
+      const div = document.createElement('div');
+      div.className = 'wp-row';
+      div.id = `wp-row-${i}`;
+      div.innerHTML = `
+        <span class="wp-num">${i + 1}</span>
+        <input type="number" step="0.05" value="${wp[0].toFixed(2)}" data-wp="${i}" data-axis="0">
+        <input type="number" step="0.05" value="${wp[1].toFixed(2)}" data-wp="${i}" data-axis="1">
+        <input type="number" step="0.05" value="${wp[2].toFixed(2)}" data-wp="${i}" data-axis="2">`;
+      container.appendChild(div);
+      div.querySelectorAll('input').forEach(inp => {
+        inp.addEventListener('input', () => {
+          const wpIdx = parseInt(inp.dataset.wp);
+          const axis = parseInt(inp.dataset.axis);
+          this._pathWaypoints[wpIdx][axis] = parseFloat(inp.value) || 0;
+          this._updateWaypointVis();
+        });
+      });
+    }
+  }
+
+  _updateWaypointVis() {
+    this.vis.setWaypoints(this._pathWaypoints);
+  }
+
+  _playPath() {
+    if (this._pathPlaying) return;
+    this._pathPlaying = true;
+    this._pathCurrentIdx = 0;
+
+    // Enable trace to visualize robot motion
+    this.vis.showTrace = true;
+    this.vis.clearTrace();
+    document.getElementById('show-trace').checked = true;
+
+    document.getElementById('path-play').textContent = 'Playing...';
+    document.getElementById('path-play').disabled = true;
+
+    this._advancePath();
+  }
+
+  _advancePath() {
+    if (!this._pathPlaying) return;
+
+    if (this._pathCurrentIdx >= 10) {
+      this._stopPath();
+      document.getElementById('path-progress').textContent = 'Path complete!';
+      return;
+    }
+
+    const idx = this._pathCurrentIdx;
+    const target = this._pathWaypoints[idx];
+
+    // Update progress text
+    document.getElementById('path-progress').textContent = `Waypoint ${idx + 1} / 10`;
+
+    // Highlight in 3D
+    this.vis.highlightWaypoint(idx);
+    this.vis.setTarget(target, true);
+
+    // Highlight in UI
+    document.querySelectorAll('.wp-row').forEach((r, i) => {
+      r.classList.toggle('active', i === idx);
+      r.classList.toggle('reached', i < idx);
+    });
+
+    // Solve IK
+    const result = this.robot.solveIK(target, this.robot.angles, { maxIter: 300, tol: 0.001, lambda: 0.4 });
+
+    // Get speed from dropdown
+    const speed = parseInt(document.getElementById('path-speed').value) || 800;
+
+    // Animate to solution
+    this._animateToAngles(result.angles, speed);
+  }
+
+  _stopPath() {
+    const wasPlaying = this._pathPlaying;
+    this._pathPlaying = false;
+    this._animating = false;
+
+    document.getElementById('path-play').textContent = 'Play';
+    document.getElementById('path-play').disabled = false;
+
+    if (!wasPlaying) {
+      document.getElementById('path-progress').textContent = '';
+    } else if (this._pathCurrentIdx < 10) {
+      document.getElementById('path-progress').textContent = 'Stopped';
+    }
+
+    // Reset UI highlights
+    document.querySelectorAll('.wp-row').forEach(r => {
+      r.classList.remove('active');
+    });
+
+    this.vis.setTarget([0, 0, 0], false);
+    // Reset waypoint highlight
+    for (let i = 0; i < this.vis.waypointMeshes.length; i++) {
+      const m = this.vis.waypointMeshes[i];
+      m.material.opacity = 0.7;
+      m.material.emissiveIntensity = 0.3;
+      m.scale.setScalar(1);
     }
   }
 
@@ -881,6 +1145,7 @@ class App {
       this._buildSliders();
       this._updateDHTable();
       this._updateFK();
+      this._resetPathForPreset();
       if (this.mode === 'ik') {
         const T = this.robot.fk(this.robot.angles);
         const ee = mat4Pos(T[this.robot.nJoints]);
@@ -919,6 +1184,10 @@ class App {
     this.vis.onTargetDrop = pos => {
       this._runIK(pos);
     };
+
+    // Path planner
+    document.getElementById('path-play').addEventListener('click', () => this._playPath());
+    document.getElementById('path-stop').addEventListener('click', () => this._stopPath());
 
     // Display toggles
     document.getElementById('show-frames').addEventListener('change', e => {
