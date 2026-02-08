@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RoboKin - Robot Kinematics Simulator</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0e17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="icon-192.svg" type="image/svg+xml">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0e17;--panel:#111827;--border:#1e293b;--text:#e2e8f0;
+  --muted:#94a3b8;--accent:#38bdf8;--accent2:#22d3ee;
+  --j0:#ef4444;--j1:#f97316;--j2:#eab308;--j3:#22c55e;--j4:#3b82f6;--j5:#a855f7;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px}
+#app{display:flex;height:100%}
+#viewport-wrap{flex:1;position:relative;overflow:hidden}
+canvas{display:block;width:100%!important;height:100%!important}
+#overlay{position:absolute;top:12px;left:12px;background:rgba(17,24,39,.85);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.6;pointer-events:none;backdrop-filter:blur(6px)}
+#overlay .lbl{color:var(--muted);margin-right:4px}
+#overlay .val{color:var(--accent);font-family:"SF Mono",Consolas,monospace}
+#hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);color:var(--muted);font-size:11px;pointer-events:none;opacity:.7}
+
+/* Sidebar */
+#sidebar{width:320px;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+#sidebar::-webkit-scrollbar{width:4px}
+#sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.section{padding:14px 16px;border-bottom:1px solid var(--border)}
+.section h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;font-weight:600}
+.logo{padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.logo h1{font-size:18px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo span{font-size:11px;color:var(--muted)}
+
+/* Mode toggle */
+.mode-toggle{display:flex;background:var(--bg);border-radius:6px;overflow:hidden}
+.mode-btn{flex:1;padding:8px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;transition:all .2s;border:none;background:transparent;color:var(--muted)}
+.mode-btn.active{background:var(--accent);color:var(--bg)}
+
+/* Preset selector */
+select{width:100%;padding:7px 10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none}
+select:focus{border-color:var(--accent)}
+
+/* Sliders */
+.joint-row{margin-bottom:10px}
+.joint-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.joint-label{font-size:12px;font-weight:600}
+.joint-value{font-size:11px;color:var(--accent);font-family:"SF Mono",Consolas,monospace}
+input[type=range]{-webkit-appearance:none;width:100%;height:6px;border-radius:3px;background:var(--bg);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;cursor:pointer}
+
+/* IK inputs */
+.ik-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+.ik-row label{font-size:12px;color:var(--muted);width:20px;text-align:right;flex-shrink:0}
+.ik-row input[type=number]{flex:1;padding:6px 8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:"SF Mono",Consolas,monospace;outline:none}
+.ik-row input[type=number]:focus{border-color:var(--accent)}
+.btn{padding:8px 16px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;width:100%}
+.btn-primary{background:var(--accent);color:var(--bg)}
+.btn-primary:hover{filter:brightness(1.15)}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+.ik-status{font-size:11px;margin-top:6px;padding:4px 8px;border-radius:4px;text-align:center}
+.ik-status.ok{background:rgba(34,197,94,.15);color:#22c55e}
+.ik-status.fail{background:rgba(239,68,68,.15);color:#ef4444}
+.ik-status.working{background:rgba(56,189,248,.15);color:var(--accent)}
+
+/* DH table */
+.dh-table{width:100%;font-size:11px;border-collapse:collapse}
+.dh-table th{color:var(--muted);font-weight:600;padding:4px 6px;text-align:right;border-bottom:1px solid var(--border)}
+.dh-table td{padding:4px 6px;text-align:right;font-family:"SF Mono",Consolas,monospace;color:var(--text)}
+.dh-table tr:hover td{background:rgba(56,189,248,.05)}
+
+/* Toggle row */
+.toggle-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.toggle-row label{font-size:12px;color:var(--muted)}
+.toggle{position:relative;width:36px;height:20px;cursor:pointer}
+.toggle input{display:none}
+.toggle .slider{position:absolute;inset:0;background:var(--bg);border-radius:10px;transition:.2s}
+.toggle .slider::after{content:'';position:absolute;left:3px;top:3px;width:14px;height:14px;background:var(--muted);border-radius:50%;transition:.2s}
+.toggle input:checked+.slider{background:var(--accent)}
+.toggle input:checked+.slider::after{left:19px;background:var(--bg)}
+
+@media(max-width:768px){
+  #app{flex-direction:column}
+  #sidebar{width:100%;height:45%;border-left:none;border-top:1px solid var(--border)}
+  #viewport-wrap{height:55%}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="viewport-wrap">
+    <canvas id="viewport"></canvas>
+    <div id="overlay">
+      <div><span class="lbl">End-Effector</span></div>
+      <div><span class="lbl">X:</span><span class="val" id="ee-x">0.000</span>
+           <span class="lbl" style="margin-left:8px">Y:</span><span class="val" id="ee-y">0.000</span>
+           <span class="lbl" style="margin-left:8px">Z:</span><span class="val" id="ee-z">0.000</span></div>
+      <div style="margin-top:4px"><span class="lbl">Reach:</span><span class="val" id="ee-r">0.000</span></div>
+    </div>
+    <div id="hint">Drag to orbit &middot; Scroll to zoom &middot; Right-drag to pan</div>
+  </div>
+  <div id="sidebar">
+    <div class="logo">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="22" r="3" fill="#38bdf8"/><line x1="14" y1="22" x2="14" y2="14" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/><circle cx="14" cy="14" r="2.5" fill="#22d3ee"/><line x1="14" y1="14" x2="20" y2="8" stroke="#22d3ee" stroke-width="2" stroke-linecap="round"/><circle cx="20" cy="8" r="2" fill="#a855f7"/><line x1="20" y1="8" x2="18" y2="3" stroke="#a855f7" stroke-width="1.5" stroke-linecap="round"/><circle cx="18" cy="3" r="1.5" fill="#eab308"/></svg>
+      <div><h1>RoboKin</h1><span>Kinematics Simulator</span></div>
+    </div>
+
+    <div class="section">
+      <h2>Mode</h2>
+      <div class="mode-toggle">
+        <button class="mode-btn active" data-mode="fk">Forward (FK)</button>
+        <button class="mode-btn" data-mode="ik">Inverse (IK)</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Robot Preset</h2>
+      <select id="preset-select">
+        <option value="6dof">6-DOF Industrial</option>
+        <option value="ur5">UR5-like</option>
+        <option value="scara">4-DOF SCARA</option>
+        <option value="3link">3-Link Planar</option>
+      </select>
+    </div>
+
+    <div class="section" id="fk-section">
+      <h2>Joint Angles</h2>
+      <div id="fk-sliders"></div>
+      <button class="btn btn-outline" id="reset-joints" style="margin-top:8px">Reset to Zero</button>
+    </div>
+
+    <div class="section" id="ik-section" style="display:none">
+      <h2>Target Position</h2>
+      <div class="ik-row"><label>X</label><input type="number" id="ik-x" step="0.05" value="0.5"></div>
+      <div class="ik-row"><label>Y</label><input type="number" id="ik-y" step="0.05" value="0.8"></div>
+      <div class="ik-row"><label>Z</label><input type="number" id="ik-z" step="0.05" value="0.3"></div>
+      <button class="btn btn-primary" id="solve-ik" style="margin-top:8px">Solve IK</button>
+      <div class="ik-status" id="ik-status" style="display:none"></div>
+      <p style="font-size:11px;color:var(--muted);margin-top:8px">You can also drag the yellow target sphere in the 3D view.</p>
+    </div>
+
+    <div class="section">
+      <h2>Display</h2>
+      <div class="toggle-row"><label>Joint Frames</label><label class="toggle"><input type="checkbox" id="show-frames"><span class="slider"></span></label></div>
+      <div class="toggle-row"><label>Grid</label><label class="toggle"><input type="checkbox" id="show-grid" checked><span class="slider"></span></label></div>
+      <div class="toggle-row"><label>EE Trace</label><label class="toggle"><input type="checkbox" id="show-trace"><span class="slider"></span></label></div>
+    </div>
+
+    <div class="section">
+      <h2>DH Parameters</h2>
+      <table class="dh-table" id="dh-table">
+        <thead><tr><th>Joint</th><th>&theta;</th><th>d</th><th>a</th><th>&alpha;</th></tr></thead>
+        <tbody id="dh-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ================================================================
+//  SECTION 1: MATH UTILITIES
+// ================================================================
+
+const DEG = 180 / Math.PI;
+const RAD = Math.PI / 180;
+
+function dhTransform(theta, d, a, alpha) {
+  const ct = Math.cos(theta), st = Math.sin(theta);
+  const ca = Math.cos(alpha), sa = Math.sin(alpha);
+  return [
+    ct, -st * ca,  st * sa, a * ct,
+    st,  ct * ca, -ct * sa, a * st,
+    0,   sa,       ca,      d,
+    0,   0,        0,       1
+  ];
+}
+
+function mat4Mul(A, B) {
+  const R = new Array(16);
+  for (let r = 0; r < 4; r++)
+    for (let c = 0; c < 4; c++) {
+      let s = 0;
+      for (let k = 0; k < 4; k++) s += A[r * 4 + k] * B[k * 4 + c];
+      R[r * 4 + c] = s;
+    }
+  return R;
+}
+
+function mat4Identity() {
+  return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+}
+
+function mat4Pos(M)  { return [M[3], M[7], M[11]]; }
+function mat4AxisZ(M){ return [M[2], M[6], M[10]]; }
+
+function v3Sub(a, b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+function v3Add(a, b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+function v3Scale(v, s){ return [v[0]*s, v[1]*s, v[2]*s]; }
+function v3Cross(a, b){
+  return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+}
+function v3Dot(a, b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+function v3Len(v){ return Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]); }
+
+function solveLinear(A, b, n) {
+  const aug = [];
+  for (let i = 0; i < n; i++) {
+    aug[i] = new Float64Array(n + 1);
+    for (let j = 0; j < n; j++) aug[i][j] = A[i * n + j];
+    aug[i][n] = b[i];
+  }
+  for (let col = 0; col < n; col++) {
+    let mx = col, mv = Math.abs(aug[col][col]);
+    for (let r = col + 1; r < n; r++) {
+      const v = Math.abs(aug[r][col]);
+      if (v > mv) { mv = v; mx = r; }
+    }
+    [aug[col], aug[mx]] = [aug[mx], aug[col]];
+    const p = aug[col][col];
+    if (Math.abs(p) < 1e-12) continue;
+    for (let r = col + 1; r < n; r++) {
+      const f = aug[r][col] / p;
+      for (let j = col; j <= n; j++) aug[r][j] -= f * aug[col][j];
+    }
+  }
+  const x = new Float64Array(n);
+  for (let i = n - 1; i >= 0; i--) {
+    x[i] = aug[i][n];
+    for (let j = i + 1; j < n; j++) x[i] -= aug[i][j] * x[j];
+    if (Math.abs(aug[i][i]) > 1e-12) x[i] /= aug[i][i]; else x[i] = 0;
+  }
+  return x;
+}
+
+// ================================================================
+//  SECTION 2: ROBOT KINEMATICS
+// ================================================================
+
+const PRESETS = {
+  '6dof': {
+    name: '6-DOF Industrial',
+    dh: [ // [d, a, alpha]  theta is variable
+      [0.40, 0.00,  Math.PI/2],
+      [0.00, 0.80,  0],
+      [0.00, 0.55,  0],
+      [0.00, 0.00,  Math.PI/2],
+      [0.38, 0.00, -Math.PI/2],
+      [0.18, 0.00,  0]
+    ],
+    limits: [[-180,180],[-135,135],[-150,150],[-180,180],[-120,120],[-180,180]]
+  },
+  'ur5': {
+    name: 'UR5-like',
+    dh: [
+      [0.089, 0.00,   Math.PI/2],
+      [0.00,  -0.425, 0],
+      [0.00,  -0.392, 0],
+      [0.109, 0.00,   Math.PI/2],
+      [0.095, 0.00,  -Math.PI/2],
+      [0.082, 0.00,   0]
+    ],
+    limits: [[-360,360],[-360,360],[-360,360],[-360,360],[-360,360],[-360,360]]
+  },
+  'scara': {
+    name: '4-DOF SCARA',
+    dh: [
+      [0.35, 0.00,  0],
+      [0.00, 0.70,  0],
+      [0.00, 0.50,  Math.PI],
+      [0.20, 0.00,  0]
+    ],
+    limits: [[-135,135],[-135,135],[-180,180],[-180,180]]
+  },
+  '3link': {
+    name: '3-Link Planar',
+    dh: [
+      [0.00, 0.80, 0],
+      [0.00, 0.60, 0],
+      [0.00, 0.40, 0]
+    ],
+    limits: [[-180,180],[-150,150],[-150,150]]
+  }
+};
+
+class Robot {
+  constructor(presetKey) {
+    const p = PRESETS[presetKey];
+    this.name = p.name;
+    this.dh = p.dh;
+    this.nJoints = p.dh.length;
+    this.limits = p.limits.map(l => [l[0] * RAD, l[1] * RAD]);
+    this.angles = new Float64Array(this.nJoints);
+  }
+
+  clampAngles(angles) {
+    const out = new Float64Array(angles.length);
+    for (let i = 0; i < this.nJoints; i++) {
+      out[i] = Math.max(this.limits[i][0], Math.min(this.limits[i][1], angles[i]));
+    }
+    return out;
+  }
+
+  fk(angles) {
+    const transforms = [mat4Identity()];
+    for (let i = 0; i < this.nJoints; i++) {
+      const [d, a, alpha] = this.dh[i];
+      const T = dhTransform(angles[i], d, a, alpha);
+      transforms.push(mat4Mul(transforms[i], T));
+    }
+    return transforms;
+  }
+
+  jacobian(angles) {
+    const T = this.fk(angles);
+    const pe = mat4Pos(T[this.nJoints]);
+    const n = this.nJoints;
+    const Jp = new Float64Array(3 * n); // position rows
+    const Jr = new Float64Array(3 * n); // orientation rows
+    for (let i = 0; i < n; i++) {
+      const z = mat4AxisZ(T[i]);
+      const p = mat4Pos(T[i]);
+      const d = v3Sub(pe, p);
+      const cp = v3Cross(z, d);
+      Jp[0 * n + i] = cp[0]; Jp[1 * n + i] = cp[1]; Jp[2 * n + i] = cp[2];
+      Jr[0 * n + i] = z[0];  Jr[1 * n + i] = z[1];  Jr[2 * n + i] = z[2];
+    }
+    return { Jp, Jr, n };
+  }
+
+  solveIK(target, startAngles, opts = {}) {
+    const maxIter = opts.maxIter || 200;
+    const tol = opts.tol || 0.001;
+    const lambda = opts.lambda || 0.5;
+    const n = this.nJoints;
+    let angles = new Float64Array(startAngles || this.angles);
+
+    for (let iter = 0; iter < maxIter; iter++) {
+      const T = this.fk(angles);
+      const pe = mat4Pos(T[n]);
+      const err = v3Sub(target, pe);
+      const dist = v3Len(err);
+      if (dist < tol) return { angles: this.clampAngles(angles), converged: true, error: dist, iterations: iter };
+
+      const { Jp } = this.jacobian(angles);
+      // Damped least squares: dq = J^T (J J^T + lambda^2 I)^-1 e
+      // M = J J^T + lambda^2 I  (3x3)
+      const M = new Float64Array(9);
+      for (let r = 0; r < 3; r++)
+        for (let c = 0; c < 3; c++) {
+          let s = 0;
+          for (let k = 0; k < n; k++) s += Jp[r * n + k] * Jp[c * n + k];
+          M[r * 3 + c] = s + (r === c ? lambda * lambda : 0);
+        }
+      const v = solveLinear(M, [err[0], err[1], err[2]], 3);
+      // dq = J^T v
+      for (let i = 0; i < n; i++) {
+        let dq = 0;
+        for (let r = 0; r < 3; r++) dq += Jp[r * n + i] * v[r];
+        angles[i] += dq;
+      }
+      angles = this.clampAngles(angles);
+    }
+    const T = this.fk(angles);
+    const pe = mat4Pos(T[n]);
+    return { angles, converged: false, error: v3Len(v3Sub(target, pe)), iterations: maxIter };
+  }
+}
+
+// ================================================================
+//  SECTION 3: 3D VISUALIZATION
+// ================================================================
+
+const JOINT_COLORS = [0xef4444, 0xf97316, 0xeab308, 0x22c55e, 0x3b82f6, 0xa855f7, 0xec4899, 0x14b8a6];
+const LINK_COLOR = 0x475569;
+
+class Visualizer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setClearColor(0x0a0e17);
+    this.renderer.shadowMap.enabled = true;
+
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
+    this.camera.position.set(2.5, 2.0, 2.5);
+    this.camera.lookAt(0, 0.6, 0);
+
+    this.robotGroup = new THREE.Group();
+    this.scene.add(this.robotGroup);
+    this.jointMeshes = [];
+    this.linkMeshes = [];
+    this.frameMeshes = [];
+    this.tracePoints = [];
+    this.traceLine = null;
+
+    this._setupLights();
+    this._createGrid();
+    this._createWorldAxes();
+    this._createTarget();
+    this._initOrbitControls();
+    this._initDrag();
+
+    this.showFrames = false;
+    this.showGrid = true;
+    this.showTrace = false;
+  }
+
+  _setupLights() {
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    dir.position.set(5, 8, 5);
+    dir.castShadow = true;
+    this.scene.add(dir);
+    const fill = new THREE.DirectionalLight(0x8888ff, 0.3);
+    fill.position.set(-3, 4, -3);
+    this.scene.add(fill);
+  }
+
+  _createGrid() {
+    this.grid = new THREE.GridHelper(6, 30, 0x1e293b, 0x1e293b);
+    this.scene.add(this.grid);
+  }
+
+  _createWorldAxes() {
+    const axes = new THREE.AxesHelper(0.5);
+    this.scene.add(axes);
+  }
+
+  _createTarget() {
+    const geo = new THREE.SphereGeometry(0.06, 24, 24);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffd93d, emissive: 0xffd93d, emissiveIntensity: 0.4, transparent: true, opacity: 0.9 });
+    this.targetMesh = new THREE.Mesh(geo, mat);
+    this.targetMesh.visible = false;
+    this.scene.add(this.targetMesh);
+
+    const ringGeo = new THREE.RingGeometry(0.08, 0.1, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd93d, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+    this.targetRingX = new THREE.Mesh(ringGeo, ringMat);
+    this.targetRingX.rotation.y = Math.PI / 2;
+    this.targetMesh.add(this.targetRingX);
+    this.targetRingY = new THREE.Mesh(ringGeo.clone(), ringMat.clone());
+    this.targetRingY.rotation.x = Math.PI / 2;
+    this.targetMesh.add(this.targetRingY);
+    this.targetRingZ = new THREE.Mesh(ringGeo.clone(), ringMat.clone());
+    this.targetMesh.add(this.targetRingZ);
+  }
+
+  setTarget(pos, visible) {
+    this.targetMesh.position.set(pos[0], pos[1], pos[2]);
+    this.targetMesh.visible = visible;
+  }
+
+  buildRobot(nJoints) {
+    // Clear old
+    while (this.robotGroup.children.length) this.robotGroup.remove(this.robotGroup.children[0]);
+    this.jointMeshes = [];
+    this.linkMeshes = [];
+    this.frameMeshes = [];
+
+    // Base
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.6, roughness: 0.3 });
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.06, 32), baseMat);
+    base.position.y = 0.03;
+    this.robotGroup.add(base);
+
+    for (let i = 0; i <= nJoints; i++) {
+      // Joint sphere
+      const jc = JOINT_COLORS[i % JOINT_COLORS.length];
+      const jMat = new THREE.MeshStandardMaterial({ color: jc, emissive: jc, emissiveIntensity: 0.2, metalness: 0.3, roughness: 0.4 });
+      const radius = 0.055 - i * 0.003;
+      const jMesh = new THREE.Mesh(new THREE.SphereGeometry(Math.max(radius, 0.025), 20, 20), jMat);
+      this.robotGroup.add(jMesh);
+      this.jointMeshes.push(jMesh);
+
+      // Link cylinder (between joint i and i+1)
+      if (i < nJoints) {
+        const lMat = new THREE.MeshStandardMaterial({ color: LINK_COLOR, metalness: 0.5, roughness: 0.35 });
+        const lMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1, 12), lMat);
+        this.robotGroup.add(lMesh);
+        this.linkMeshes.push(lMesh);
+      }
+
+      // Coordinate frame axes
+      const frameGroup = new THREE.Group();
+      const axLen = 0.12;
+      const makeLine = (dir, color) => {
+        const geo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0,0,0),
+          new THREE.Vector3(dir[0]*axLen, dir[1]*axLen, dir[2]*axLen)
+        ]);
+        return new THREE.Line(geo, new THREE.LineBasicMaterial({ color }));
+      };
+      frameGroup.add(makeLine([1,0,0], 0xff3333));
+      frameGroup.add(makeLine([0,1,0], 0x33ff33));
+      frameGroup.add(makeLine([0,0,1], 0x3333ff));
+      frameGroup.visible = false;
+      this.robotGroup.add(frameGroup);
+      this.frameMeshes.push(frameGroup);
+    }
+
+    // Trace line
+    if (this.traceLine) this.scene.remove(this.traceLine);
+    this.tracePoints = [];
+    const traceGeo = new THREE.BufferGeometry();
+    traceGeo.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+    this.traceLine = new THREE.Line(traceGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.5 }));
+    this.scene.add(this.traceLine);
+  }
+
+  updateRobot(transforms) {
+    const n = transforms.length - 1; // nJoints
+    for (let i = 0; i <= n; i++) {
+      const pos = mat4Pos(transforms[i]);
+      this.jointMeshes[i].position.set(pos[0], pos[1], pos[2]);
+
+      // Frame
+      if (this.frameMeshes[i]) {
+        this.frameMeshes[i].position.set(pos[0], pos[1], pos[2]);
+        const m = transforms[i];
+        const mat = new THREE.Matrix4();
+        mat.set(
+          m[0], m[1], m[2], 0,
+          m[4], m[5], m[6], 0,
+          m[8], m[9], m[10], 0,
+          0, 0, 0, 1
+        );
+        this.frameMeshes[i].setRotationFromMatrix(mat);
+        this.frameMeshes[i].visible = this.showFrames;
+      }
+    }
+
+    // Links
+    for (let i = 0; i < n; i++) {
+      const pA = mat4Pos(transforms[i]);
+      const pB = mat4Pos(transforms[i + 1]);
+      const mid = [(pA[0]+pB[0])/2, (pA[1]+pB[1])/2, (pA[2]+pB[2])/2];
+      const dir = v3Sub(pB, pA);
+      const len = v3Len(dir);
+      if (len < 0.001) {
+        this.linkMeshes[i].visible = false;
+        continue;
+      }
+      this.linkMeshes[i].visible = true;
+      this.linkMeshes[i].position.set(mid[0], mid[1], mid[2]);
+      this.linkMeshes[i].scale.set(1, len, 1);
+      const up = new THREE.Vector3(0, 1, 0);
+      const d = new THREE.Vector3(dir[0]/len, dir[1]/len, dir[2]/len);
+      const q = new THREE.Quaternion().setFromUnitVectors(up, d);
+      this.linkMeshes[i].quaternion.copy(q);
+    }
+
+    // EE trace
+    if (this.showTrace) {
+      const ee = mat4Pos(transforms[n]);
+      this.tracePoints.push(ee[0], ee[1], ee[2]);
+      if (this.tracePoints.length > 30000) this.tracePoints.splice(0, 3);
+      this.traceLine.geometry.setAttribute('position', new THREE.Float32BufferAttribute(this.tracePoints, 3));
+      this.traceLine.geometry.attributes.position.needsUpdate = true;
+      this.traceLine.visible = true;
+    } else {
+      this.traceLine.visible = false;
+    }
+
+    this.grid.visible = this.showGrid;
+  }
+
+  clearTrace() {
+    this.tracePoints = [];
+    this.traceLine.geometry.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+  }
+
+  // ---- Orbit Camera Controls ----
+  _initOrbitControls() {
+    this._orbitState = { rotating: false, panning: false, sx: 0, sy: 0 };
+    this._spherical = { radius: 4.2, theta: Math.PI / 4, phi: Math.PI / 3 };
+    this._target = new THREE.Vector3(0, 0.5, 0);
+
+    const el = this.canvas;
+    el.addEventListener('pointerdown', e => {
+      if (this._draggingTarget) return;
+      if (e.button === 0) this._orbitState.rotating = true;
+      if (e.button === 2) this._orbitState.panning = true;
+      this._orbitState.sx = e.clientX;
+      this._orbitState.sy = e.clientY;
+      el.setPointerCapture(e.pointerId);
+    });
+    el.addEventListener('pointermove', e => {
+      const dx = e.clientX - this._orbitState.sx;
+      const dy = e.clientY - this._orbitState.sy;
+      this._orbitState.sx = e.clientX;
+      this._orbitState.sy = e.clientY;
+      if (this._orbitState.rotating) {
+        this._spherical.theta -= dx * 0.008;
+        this._spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this._spherical.phi - dy * 0.008));
+      }
+      if (this._orbitState.panning) {
+        const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
+        const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
+        const panSpeed = 0.003 * this._spherical.radius;
+        this._target.add(right.multiplyScalar(-dx * panSpeed));
+        this._target.add(up.multiplyScalar(dy * panSpeed));
+      }
+    });
+    el.addEventListener('pointerup', () => {
+      this._orbitState.rotating = false;
+      this._orbitState.panning = false;
+    });
+    el.addEventListener('wheel', e => {
+      e.preventDefault();
+      this._spherical.radius *= 1 + e.deltaY * 0.001;
+      this._spherical.radius = Math.max(0.5, Math.min(20, this._spherical.radius));
+    }, { passive: false });
+    el.addEventListener('contextmenu', e => e.preventDefault());
+  }
+
+  _updateCamera() {
+    const { radius, theta, phi } = this._spherical;
+    this.camera.position.set(
+      this._target.x + radius * Math.sin(phi) * Math.cos(theta),
+      this._target.y + radius * Math.cos(phi),
+      this._target.z + radius * Math.sin(phi) * Math.sin(theta)
+    );
+    this.camera.lookAt(this._target);
+  }
+
+  // ---- Target Dragging ----
+  _initDrag() {
+    this._draggingTarget = false;
+    this._raycaster = new THREE.Raycaster();
+    this._dragPlane = new THREE.Plane();
+    this._mouse = new THREE.Vector2();
+
+    const el = this.canvas;
+    el.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || !this.targetMesh.visible) return;
+      this._updateMouse(e);
+      this._raycaster.setFromCamera(this._mouse, this.camera);
+      const hits = this._raycaster.intersectObject(this.targetMesh);
+      if (hits.length > 0) {
+        this._draggingTarget = true;
+        this._orbitState.rotating = false;
+        const camDir = new THREE.Vector3();
+        this.camera.getWorldDirection(camDir);
+        this._dragPlane.setFromNormalAndCoplanarPoint(camDir.negate(), this.targetMesh.position);
+        el.setPointerCapture(e.pointerId);
+      }
+    });
+    el.addEventListener('pointermove', e => {
+      if (!this._draggingTarget) return;
+      this._updateMouse(e);
+      this._raycaster.setFromCamera(this._mouse, this.camera);
+      const pt = new THREE.Vector3();
+      if (this._raycaster.ray.intersectPlane(this._dragPlane, pt)) {
+        this.targetMesh.position.copy(pt);
+        if (this.onTargetDrag) this.onTargetDrag([pt.x, pt.y, pt.z]);
+      }
+    });
+    el.addEventListener('pointerup', () => {
+      if (this._draggingTarget) {
+        this._draggingTarget = false;
+        const p = this.targetMesh.position;
+        if (this.onTargetDrop) this.onTargetDrop([p.x, p.y, p.z]);
+      }
+    });
+  }
+
+  _updateMouse(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    this._mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this._mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  resize() {
+    const w = this.canvas.parentElement.clientWidth;
+    const h = this.canvas.parentElement.clientHeight;
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+  }
+
+  render() {
+    this._updateCamera();
+    this.renderer.render(this.scene, this.camera);
+  }
+}
+
+// ================================================================
+//  SECTION 4: APP CONTROLLER
+// ================================================================
+
+class App {
+  constructor() {
+    this.canvas = document.getElementById('viewport');
+    this.vis = new Visualizer(this.canvas);
+    this.mode = 'fk'; // 'fk' or 'ik'
+    this.presetKey = '6dof';
+    this.robot = new Robot(this.presetKey);
+    this._animating = false;
+    this._animTarget = null;
+    this._animStart = null;
+    this._animDuration = 0;
+    this._animStartTime = 0;
+  }
+
+  init() {
+    this.vis.buildRobot(this.robot.nJoints);
+    this._buildSliders();
+    this._updateDHTable();
+    this._updateFK();
+    this._bindEvents();
+    this.vis.resize();
+    this._loop();
+  }
+
+  _buildSliders() {
+    const container = document.getElementById('fk-sliders');
+    container.innerHTML = '';
+    const colors = ['var(--j0)','var(--j1)','var(--j2)','var(--j3)','var(--j4)','var(--j5)'];
+    for (let i = 0; i < this.robot.nJoints; i++) {
+      const lim = this.robot.limits[i];
+      const minD = Math.round(lim[0] * DEG);
+      const maxD = Math.round(lim[1] * DEG);
+      const c = colors[i % colors.length];
+      const div = document.createElement('div');
+      div.className = 'joint-row';
+      div.innerHTML = `
+        <div class="joint-header">
+          <span class="joint-label" style="color:${c}">J${i+1}</span>
+          <span class="joint-value" id="jv-${i}">0.0&deg;</span>
+        </div>
+        <input type="range" id="js-${i}" min="${minD}" max="${maxD}" value="0" step="0.5"
+          style="--c:${c}">`;
+      container.appendChild(div);
+      const slider = div.querySelector('input');
+      // Color the thumb
+      slider.style.setProperty('accent-color', c);
+      slider.addEventListener('input', () => {
+        this.robot.angles[i] = parseFloat(slider.value) * RAD;
+        document.getElementById(`jv-${i}`).textContent = slider.value + '\u00B0';
+        this._updateFK();
+      });
+    }
+  }
+
+  _updateDHTable() {
+    const tbody = document.getElementById('dh-body');
+    tbody.innerHTML = '';
+    for (let i = 0; i < this.robot.nJoints; i++) {
+      const [d, a, alpha] = this.robot.dh[i];
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td style="color:${['var(--j0)','var(--j1)','var(--j2)','var(--j3)','var(--j4)','var(--j5)'][i % 6]}">J${i+1}</td>
+        <td id="dh-theta-${i}">${(this.robot.angles[i] * DEG).toFixed(1)}&deg;</td>
+        <td>${d.toFixed(3)}</td><td>${a.toFixed(3)}</td><td>${(alpha * DEG).toFixed(1)}&deg;</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
+  _updateFK() {
+    const T = this.robot.fk(this.robot.angles);
+    this.vis.updateRobot(T);
+
+    const ee = mat4Pos(T[this.robot.nJoints]);
+    document.getElementById('ee-x').textContent = ee[0].toFixed(3);
+    document.getElementById('ee-y').textContent = ee[1].toFixed(3);
+    document.getElementById('ee-z').textContent = ee[2].toFixed(3);
+    document.getElementById('ee-r').textContent = v3Len(ee).toFixed(3);
+
+    // Update DH theta column
+    for (let i = 0; i < this.robot.nJoints; i++) {
+      const el = document.getElementById(`dh-theta-${i}`);
+      if (el) el.textContent = (this.robot.angles[i] * DEG).toFixed(1) + '\u00B0';
+    }
+  }
+
+  _setMode(mode) {
+    this.mode = mode;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    document.getElementById('fk-section').style.display = mode === 'fk' ? '' : 'none';
+    document.getElementById('ik-section').style.display = mode === 'ik' ? '' : 'none';
+
+    if (mode === 'ik') {
+      const T = this.robot.fk(this.robot.angles);
+      const ee = mat4Pos(T[this.robot.nJoints]);
+      document.getElementById('ik-x').value = ee[0].toFixed(3);
+      document.getElementById('ik-y').value = ee[1].toFixed(3);
+      document.getElementById('ik-z').value = ee[2].toFixed(3);
+      this.vis.setTarget(ee, true);
+    } else {
+      this.vis.setTarget([0,0,0], false);
+      document.getElementById('ik-status').style.display = 'none';
+    }
+  }
+
+  _runIK(target) {
+    const statusEl = document.getElementById('ik-status');
+    statusEl.style.display = '';
+    statusEl.className = 'ik-status working';
+    statusEl.textContent = 'Solving...';
+
+    const result = this.robot.solveIK(target, this.robot.angles, { maxIter: 300, tol: 0.001, lambda: 0.4 });
+
+    if (result.converged || result.error < 0.01) {
+      statusEl.className = 'ik-status ok';
+      statusEl.textContent = `Converged in ${result.iterations} iter (err: ${result.error.toFixed(4)})`;
+      this._animateToAngles(result.angles, 400);
+    } else {
+      statusEl.className = 'ik-status fail';
+      statusEl.textContent = `No solution (err: ${result.error.toFixed(3)}). Target may be out of reach.`;
+      // Still apply best attempt
+      this._animateToAngles(result.angles, 400);
+    }
+  }
+
+  _animateToAngles(targetAngles, durationMs) {
+    this._animStart = new Float64Array(this.robot.angles);
+    this._animTarget = new Float64Array(targetAngles);
+    this._animDuration = durationMs;
+    this._animStartTime = performance.now();
+    this._animating = true;
+  }
+
+  _tickAnimation(now) {
+    if (!this._animating) return;
+    let t = (now - this._animStartTime) / this._animDuration;
+    if (t >= 1) { t = 1; this._animating = false; }
+    // Smooth ease
+    t = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    for (let i = 0; i < this.robot.nJoints; i++) {
+      this.robot.angles[i] = this._animStart[i] + (this._animTarget[i] - this._animStart[i]) * t;
+    }
+    this._syncSliders();
+    this._updateFK();
+  }
+
+  _syncSliders() {
+    for (let i = 0; i < this.robot.nJoints; i++) {
+      const s = document.getElementById(`js-${i}`);
+      const v = document.getElementById(`jv-${i}`);
+      if (s) {
+        const deg = (this.robot.angles[i] * DEG).toFixed(1);
+        s.value = deg;
+        v.textContent = deg + '\u00B0';
+      }
+    }
+  }
+
+  _bindEvents() {
+    // Mode toggle
+    document.querySelectorAll('.mode-btn').forEach(b => {
+      b.addEventListener('click', () => this._setMode(b.dataset.mode));
+    });
+
+    // Preset
+    document.getElementById('preset-select').addEventListener('change', e => {
+      this.presetKey = e.target.value;
+      this.robot = new Robot(this.presetKey);
+      this.vis.buildRobot(this.robot.nJoints);
+      this.vis.clearTrace();
+      this._buildSliders();
+      this._updateDHTable();
+      this._updateFK();
+      if (this.mode === 'ik') {
+        const T = this.robot.fk(this.robot.angles);
+        const ee = mat4Pos(T[this.robot.nJoints]);
+        this.vis.setTarget(ee, true);
+      }
+    });
+
+    // Reset
+    document.getElementById('reset-joints').addEventListener('click', () => {
+      this.robot.angles.fill(0);
+      this._syncSliders();
+      this._updateFK();
+      this.vis.clearTrace();
+    });
+
+    // IK solve button
+    document.getElementById('solve-ik').addEventListener('click', () => {
+      const x = parseFloat(document.getElementById('ik-x').value) || 0;
+      const y = parseFloat(document.getElementById('ik-y').value) || 0;
+      const z = parseFloat(document.getElementById('ik-z').value) || 0;
+      this.vis.setTarget([x, y, z], true);
+      this._runIK([x, y, z]);
+    });
+
+    // Target drag
+    this.vis.onTargetDrag = pos => {
+      document.getElementById('ik-x').value = pos[0].toFixed(3);
+      document.getElementById('ik-y').value = pos[1].toFixed(3);
+      document.getElementById('ik-z').value = pos[2].toFixed(3);
+      // Live IK while dragging
+      const result = this.robot.solveIK(pos, this.robot.angles, { maxIter: 50, tol: 0.005, lambda: 0.6 });
+      this.robot.angles = result.angles;
+      this._syncSliders();
+      this._updateFK();
+    };
+    this.vis.onTargetDrop = pos => {
+      this._runIK(pos);
+    };
+
+    // Display toggles
+    document.getElementById('show-frames').addEventListener('change', e => {
+      this.vis.showFrames = e.target.checked;
+      this._updateFK();
+    });
+    document.getElementById('show-grid').addEventListener('change', e => {
+      this.vis.showGrid = e.target.checked;
+      this._updateFK();
+    });
+    document.getElementById('show-trace').addEventListener('change', e => {
+      this.vis.showTrace = e.target.checked;
+      if (!e.target.checked) this.vis.clearTrace();
+      this._updateFK();
+    });
+
+    // Resize
+    window.addEventListener('resize', () => this.vis.resize());
+  }
+
+  _loop() {
+    const tick = (now) => {
+      this._tickAnimation(now);
+      this.vis.render();
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+}
+
+// ================================================================
+//  BOOT
+// ================================================================
+
+const app = new App();
+app.init();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "RoboKin - Robot Kinematics Simulator",
+  "short_name": "RoboKin",
+  "description": "Forward & inverse kinematics calculator and 3D visualizer for articulated robot arms",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0a0e17",
+  "theme_color": "#0a0e17",
+  "orientation": "any",
+  "icons": [
+    { "src": "icon-192.svg", "sizes": "192x192", "type": "image/svg+xml" },
+    { "src": "icon-512.svg", "sizes": "512x512", "type": "image/svg+xml" }
+  ]
+}
