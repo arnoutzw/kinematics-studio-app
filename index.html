@@ -154,7 +154,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
     <div class="section">
       <h2>Robot Preset</h2>
       <select id="preset-select">
-        <option value="6dof">6-DOF Industrial</option>
+        <option value="kuka">KUKA KR 500</option>
         <option value="ur5">UR5-like</option>
         <option value="scara">4-DOF SCARA</option>
         <option value="3link">3-Link Planar</option>
@@ -295,17 +295,17 @@ function solveLinear(A, b, n) {
 // ================================================================
 
 const PRESETS = {
-  '6dof': {
-    name: '6-DOF Industrial',
-    dh: [ // [d, a, alpha]  theta is variable
-      [0.40, 0.00,  Math.PI/2],
-      [0.00, 0.80,  0],
-      [0.00, 0.55,  0],
-      [0.00, 0.00,  Math.PI/2],
-      [0.38, 0.00, -Math.PI/2],
-      [0.18, 0.00,  0]
+  'kuka': {
+    name: 'KUKA KR 500',
+    dh: [ // [d, a, alpha]  theta is variable — Kuka KR 500 DH parameters
+      [1.045, 0.500, -Math.PI/2],   // Joint 1: base rotation
+      [0.000, 1.300,  0],           // Joint 2: shoulder (upper arm)
+      [0.000, 0.055,  Math.PI/2],   // Joint 3: elbow
+      [1.025, 0.000, -Math.PI/2],   // Joint 4: wrist rotation
+      [0.000, 0.000,  Math.PI/2],   // Joint 5: wrist bend
+      [0.290, 0.000,  0]            // Joint 6: tool flange
     ],
-    limits: [[-180,180],[-135,135],[-150,150],[-180,180],[-120,120],[-180,180]]
+    limits: [[-185,185],[-130,20],[-100,144],[-350,350],[-130,130],[-350,350]]
   },
   'ur5': {
     name: 'UR5-like',
@@ -809,7 +809,7 @@ class App {
     this.canvas = document.getElementById('viewport');
     this.vis = new Visualizer(this.canvas);
     this.mode = 'fk'; // 'fk' or 'ik'
-    this.presetKey = '6dof';
+    this.presetKey = 'kuka';
     this.robot = new Robot(this.presetKey);
     this._animating = false;
     this._animTarget = null;
