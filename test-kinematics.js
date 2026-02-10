@@ -82,17 +82,17 @@ function solveLinear(A, b, n) {
 // ================================================================
 
 const PRESETS = {
-  '6dof': {
-    name: '6-DOF Industrial',
-    dh: [ // [d, a, alpha]  theta is variable
-      [0.40, 0.00,  Math.PI/2],
-      [0.00, 0.80,  0],
-      [0.00, 0.55,  0],
-      [0.00, 0.00,  Math.PI/2],
-      [0.38, 0.00, -Math.PI/2],
-      [0.18, 0.00,  0]
+  'kuka': {
+    name: 'KUKA KR 500',
+    dh: [ // [d, a, alpha]  theta is variable — Kuka KR 500 DH parameters
+      [1.045, 0.500, -Math.PI/2],   // Joint 1: base rotation
+      [0.000, 1.300,  0],           // Joint 2: shoulder (upper arm)
+      [0.000, 0.055,  Math.PI/2],   // Joint 3: elbow
+      [1.025, 0.000, -Math.PI/2],   // Joint 4: wrist rotation
+      [0.000, 0.000,  Math.PI/2],   // Joint 5: wrist bend
+      [0.290, 0.000,  0]            // Joint 6: tool flange
     ],
-    limits: [[-180,180],[-135,135],[-150,150],[-180,180],[-120,120],[-180,180]]
+    limits: [[-185,185],[-130,20],[-100,144],[-350,350],[-130,130],[-350,350]]
   },
   'ur5': {
     name: 'UR5-like',
@@ -231,7 +231,7 @@ function runTests() {
   console.log('TEST 1: Forward Kinematics at Zero Angles');
   console.log('-'.repeat(70));
   try {
-    const robot = new Robot('6dof');
+    const robot = new Robot('kuka');
     const angles = new Float64Array(robot.nJoints);
     const transforms = robot.fk(angles);
     const ee = mat4Pos(transforms[robot.nJoints]);
@@ -262,7 +262,7 @@ function runTests() {
   console.log('TEST 2: IK Solver - Reachable Target');
   console.log('-'.repeat(70));
   try {
-    const robot = new Robot('6dof');
+    const robot = new Robot('kuka');
     
     // Set up a simple configuration
     const startAngles = new Float64Array(robot.nJoints);
@@ -299,7 +299,7 @@ function runTests() {
   console.log('TEST 3: FK(IK(target)) = target Verification');
   console.log('-'.repeat(70));
   try {
-    const robot = new Robot('6dof');
+    const robot = new Robot('kuka');
     
     // Create a random reachable target
     const randomAngles = new Float64Array(robot.nJoints);
